@@ -1,0 +1,89 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.staging
+
+# Build output
+dist/
+build/
+*.js.map
+*.d.ts.map
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage directory
+coverage/
+*.lcov
+.nyc_output/
+
+# ESLint cache
+.eslintcache
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Testing
+test-results/
+playwright-report/
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Uploads
+uploads/
+public/uploads/
+
+# Keys and certificates
+*.pem
+*.key
+*.crt
+
+# Local development
+local.json
+config/local.json
+
+# Temporary folders
+tmp/
+temp/
+.tmp/
+.temp/
+
+# Security
+security/
+secrets/
+private/
+
+# Backup files
+*.backup
+*.bak
+*.old
