@@ -21,8 +21,9 @@ export const registerValidator: ValidationChain[] = [
     .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
   body('phone')
     .optional()
-    .isMobilePhone(['en-US'])
-    .withMessage('Please provide a valid phone number'),
+    .isLength({ min: 10, max: 10 })
+    .isNumeric()
+    .withMessage('Please provide a valid 10-digit phone number'),
 ];
 
 export const loginValidator: ValidationChain[] = [

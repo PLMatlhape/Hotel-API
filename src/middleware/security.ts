@@ -268,9 +268,14 @@ export const secureCookieOptions = {
 
 // Request size limiter
 export const requestSizeLimiter = (req: Request, res: Response, next: NextFunction): void => {
+  // Skip size check for auth endpoints to prevent false positives with small payloads
+  if (req.path.startsWith('/api/auth')) {
+    return next();
+  }
+
   const contentLength = parseInt(req.headers['content-length'] || '0');
   const maxSize = parseInt(process.env.MAX_REQUEST_SIZE || '10485760'); // 10MB default
-  
+
   if (contentLength > maxSize) {
     res.status(413).json({
       success: false,
@@ -278,7 +283,7 @@ export const requestSizeLimiter = (req: Request, res: Response, next: NextFuncti
     });
     return;
   }
-  
+
   next();
 };
 
