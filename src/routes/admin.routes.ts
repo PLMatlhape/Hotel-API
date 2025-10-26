@@ -39,6 +39,16 @@ router.put('/users/:id/status', uuidParamValidator(), updateUserStatusValidator,
 // @access  Private/Admin
 router.get('/bookings', adminController.getAllBookings);
 
+// @route   GET /api/admin/analytics
+// @desc    Get system analytics (admin only)
+// @access  Private/Admin
+router.get('/analytics', adminController.getSystemAnalytics);
+
+// @route   GET /api/admin/export/bookings
+// @desc    Export booking data (admin only)
+// @access  Private/Admin
+router.get('/export/bookings', adminController.exportBookings);
+
 // @route   DELETE /api/admin/users/:id
 // @desc    Delete user (admin only)
 // @access  Private/Admin
