@@ -268,8 +268,8 @@ export const secureCookieOptions = {
 
 // Request size limiter
 export const requestSizeLimiter = (req: Request, res: Response, next: NextFunction): void => {
-  // Skip size check for auth endpoints to prevent false positives with small payloads
-  if (req.path.startsWith('/api/auth')) {
+  // Skip size check for auth endpoints, user endpoints, and GET requests (which don't have bodies)
+  if (req.path.startsWith('/api/auth') || req.path.startsWith('/api/users') || req.method === 'GET') {
     return next();
   }
 

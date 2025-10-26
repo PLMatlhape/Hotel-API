@@ -199,3 +199,95 @@ export const getUserById = async (userId: string): Promise<User | null> => {
 
   return result.rows.length > 0 ? result.rows[0] : null;
 };
+
+// =============================================
+// GET USER BY ID WITH PASSWORD
+// =============================================
+export const getUserByIdWithPassword = async (userId: string): Promise<User | null> => {
+  const result = await query(
+    `SELECT id, email, name, phone, password_hash, role, created_at, updated_at, is_active
+     FROM users
+     WHERE id = $1`,
+    [userId]
+  );
+
+  return result.rows.length > 0 ? result.rows[0] : null;
+};
+
+// =============================================
+// UPDATE USER PROFILE
+// =============================================
+export const updateUserProfile = async (
+  userId: string,
+  updates: { name?: string; phone?: string }
+): Promise<User | null> => {
+  const { name, phone } = updates;
+
+  // Build dynamic query
+  const updateFields: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (name !== undefined) {
+    updateFields.push(`name = $${paramIndex++}`);
+    values.push(name);
+  }
+
+  if (phone !== undefined) {
+    updateFields.push(`phone = $${paramIndex++}`);
+    values.push(phone);
+  }
+
+  if (updateFields.length === 0) {
+    throw new AppError('No valid fields to update', 400);
+  }
+
+  // Add updated_at timestamp
+  updateFields.push(`updated_at = NOW()`);
+
+  // Add user ID to values
+  values.push(userId);
+
+  const queryText = `
+    UPDATE users
+    SET ${updateFields.join(', ')}
+    WHERE id = $${paramIndex}
+    RETURNING id, email, name, phone, role, created_at, updated_at, is_active
+  `;
+
+  const result = await query(queryText, values);
+
+  return result.rows.length > 0 ? result.rows[0] : null;
+};
+
+// =============================================
+// UPDATE USER PASSWORD
+// =============================================
+export const updateUserPassword = async (
+  userId: string,
+  hashedPassword: string
+): Promise<User | null> => {
+  const result = await query(
+    `UPDATE users
+     SET password_hash = $1, updated_at = NOW()
+     WHERE id = $2
+     RETURNING id, email, name, phone, role, created_at, updated_at, is_active`,
+    [hashedPassword, userId]
+  );
+
+  return result.rows.length > 0 ? result.rows[0] : null;
+};
+
+// =============================================
+// DELETE USER ACCOUNT
+// =============================================
+export const deleteUserAccount = async (userId: string): Promise<User | null> => {
+  const result = await query(
+    `DELETE FROM users
+     WHERE id = $1
+     RETURNING id, email, name, phone, role, created_at, updated_at, is_active`,
+    [userId]
+  );
+
+  return result.rows.length > 0 ? result.rows[0] : null;
+};
