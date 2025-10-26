@@ -279,6 +279,68 @@ export const updateUserPassword = async (
 };
 
 // =============================================
+// UPDATE USER BY ADMIN
+// =============================================
+export const updateUserByAdmin = async (
+  userId: string,
+  updates: { name?: string; email?: string; phone?: string }
+): Promise<User | null> => {
+  const { name, email, phone } = updates;
+
+  // Check if email is being updated and if it's already taken by another user
+  if (email) {
+    const existingUser = await query(
+      'SELECT id FROM users WHERE email = $1 AND id != $2',
+      [email, userId]
+    );
+    if (existingUser.rows.length > 0) {
+      throw new AppError('Email is already in use by another user', 409);
+    }
+  }
+
+  // Build dynamic query
+  const updateFields: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  if (name !== undefined) {
+    updateFields.push(`name = $${paramIndex++}`);
+    values.push(name);
+  }
+
+  if (email !== undefined) {
+    updateFields.push(`email = $${paramIndex++}`);
+    values.push(email);
+  }
+
+  if (phone !== undefined) {
+    updateFields.push(`phone = $${paramIndex++}`);
+    values.push(phone);
+  }
+
+  if (updateFields.length === 0) {
+    throw new AppError('No valid fields to update', 400);
+  }
+
+  // Add updated_at timestamp
+  updateFields.push(`updated_at = NOW()`);
+
+  // Add user ID to values
+  values.push(userId);
+
+  const queryText = `
+    UPDATE users
+    SET ${updateFields.join(', ')}
+    WHERE id = $${paramIndex}
+    RETURNING id, email, name, phone, role, created_at, updated_at, is_active
+  `;
+
+  const result = await query(queryText, values);
+
+  return result.rows.length > 0 ? result.rows[0] : null;
+};
+
+// =============================================
 // DELETE USER ACCOUNT
 // =============================================
 export const deleteUserAccount = async (userId: string): Promise<User | null> => {

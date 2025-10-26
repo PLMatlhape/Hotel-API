@@ -199,6 +199,38 @@ export const createPaymentValidator: ValidationChain[] = [
 ];
 
 // =============================================
+// ADMIN USER UPDATE VALIDATOR
+// =============================================
+export const updateUserByAdminValidator: ValidationChain[] = [
+  body('name')
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage('Name cannot be empty')
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Name must be between 2 and 100 characters'),
+  body('email')
+    .optional()
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail(),
+  body('phone')
+    .optional()
+    .isLength({ min: 10, max: 10 })
+    .isNumeric()
+    .withMessage('Please provide a valid 10-digit phone number'),
+];
+
+// =============================================
+// ADMIN USER STATUS UPDATE VALIDATOR
+// =============================================
+export const updateUserStatusValidator: ValidationChain[] = [
+  body('is_active')
+    .isBoolean()
+    .withMessage('is_active must be a boolean value'),
+];
+
+// =============================================
 // UUID PARAM VALIDATOR
 // =============================================
 export const uuidParamValidator = (paramName: string = 'id'): ValidationChain[] => [
