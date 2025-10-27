@@ -272,14 +272,60 @@ export const requestSizeLimiter = (req: Request, res: Response, next: NextFuncti
   if (req.path.startsWith('/api/auth') || req.path.startsWith('/api/users') || req.path.startsWith('/api/admin') || req.method === 'GET') {
     return next();
   }
+  // Helper to parse human-friendly sizes: '10', '10mb', '50mb', '10485760', '1gb'
+  const parseSize = (sizeStr: string): number => {
+    if (!sizeStr) return 50 * 1024 * 1024; // default 50MB
+    const s = String(sizeStr).trim().toLowerCase();
 
-  const contentLength = parseInt(req.headers['content-length'] || '0');
-  const maxSize = parseInt(process.env.MAX_REQUEST_SIZE || '10485760'); // 10MB default
+    // match number with optional unit
+    const match = s.match(/^(\d+(?:\.\d+)?)(b|kb|mb|gb)?$/);
+    if (!match) {
+      // fallback to 50MB
+      return 50 * 1024 * 1024;
+    }
+
+  // match[1] and match[2] are strings but may be undefined in some TS configs;
+  // guard defensively and provide defaults to satisfy strict checks.
+  const valueStr = match[1] ?? '0';
+  const value = parseFloat(valueStr);
+  const unit = match[2] || 'mb'; // treat bare numbers as megabytes
+
+    switch (unit) {
+      case 'b':
+        return Math.round(value);
+      case 'kb':
+        return Math.round(value * 1024);
+      case 'mb':
+        return Math.round(value * 1024 * 1024);
+      case 'gb':
+        return Math.round(value * 1024 * 1024 * 1024);
+      default:
+        return Math.round(value * 1024 * 1024);
+    }
+  };
+
+  const rawMax = process.env.MAX_REQUEST_SIZE || '50mb';
+  const maxSize = parseSize(rawMax);
+
+  const contentLengthHeader = req.headers['content-length'];
+  const contentLength = contentLengthHeader ? parseInt(String(contentLengthHeader), 10) : NaN;
+
+  // If there's no content-length header or it's not a number, allow the request to continue
+  if (isNaN(contentLength)) {
+    return next();
+  }
 
   if (contentLength > maxSize) {
+    const toMB = (bytes: number) => (bytes / (1024 * 1024)).toFixed(2) + 'MB';
+
     res.status(413).json({
       success: false,
-      error: 'Request entity too large'
+      error: 'Request entity too large',
+      maxSizeBytes: maxSize,
+      maxSizeHuman: toMB(maxSize),
+      currentBytes: contentLength,
+      currentHuman: toMB(contentLength),
+      note: "Set MAX_REQUEST_SIZE in .env (e.g. '100mb') to increase the limit. Bare numbers are treated as megabytes."
     });
     return;
   }

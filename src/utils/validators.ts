@@ -58,6 +58,11 @@ export const createAccommodationValidator: ValidationChain[] = [
     .trim()
     .notEmpty()
     .withMessage('Country is required'),
+  body('postal_code')
+    .optional()
+    .trim()
+    .isLength({ max: 20 })
+    .withMessage('Postal code must not exceed 20 characters'),
   body('star_rating')
     .optional()
     .isInt({ min: 1, max: 5 })
@@ -70,6 +75,26 @@ export const createAccommodationValidator: ValidationChain[] = [
     .optional()
     .isFloat({ min: -180, max: 180 })
     .withMessage('Invalid longitude'),
+  body('photos')
+    .optional()
+    .isArray()
+    .withMessage('Photos must be an array'),
+  body('photos.*.url')
+    .optional()
+    .isURL()
+    .withMessage('Each photo must have a valid URL'),
+  body('photos.*.caption')
+    .optional()
+    .isString()
+    .withMessage('Photo caption must be a string'),
+  body('amenities')
+    .optional()
+    .isObject()
+    .withMessage('Amenities must be an object with categories'),
+  body('amenities.*')
+    .optional()
+    .isArray()
+    .withMessage('Each amenity category must be an array'),
 ];
 
 export const searchAccommodationValidator: ValidationChain[] = [
@@ -145,9 +170,9 @@ export const createRoomValidator: ValidationChain[] = [
     .trim()
     .notEmpty()
     .withMessage('Room type name is required'),
-  body('base_price')
+  body('price_per_night')
     .isFloat({ min: 0 })
-    .withMessage('Base price must be a positive number'),
+    .withMessage('Price per night must be a positive number'),
   body('max_guests')
     .isInt({ min: 1 })
     .withMessage('Maximum guests must be at least 1'),
