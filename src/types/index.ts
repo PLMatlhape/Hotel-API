@@ -34,11 +34,25 @@ export interface AuthRequest extends Request {
 // =============================================
 // ACCOMMODATION INTERFACES
 // =============================================
+export interface Photo {
+  id?: string;
+  url: string;
+  caption?: string;
+}
+
+export interface AmenityGroup {
+  general?: string[];
+  outdoor?: string[];
+  entertainment?: string[];
+  [key: string]: string[] | undefined;
+}
+
 export interface Accommodation {
   id: string;
   name: string;
   description?: string;
   address: string;
+  postal_code?: string;
   city: string;
   country: string;
   star_rating?: number;
@@ -46,6 +60,8 @@ export interface Accommodation {
   longitude?: number;
   owner_id: string;
   is_active: boolean;
+  photos?: Photo[];
+  amenities?: AmenityGroup;
   created_at: Date;
   updated_at: Date;
 }
@@ -55,7 +71,7 @@ export interface Room {
   accommodation_id: string;
   type_name: string;
   description?: string;
-  base_price: number;
+  price_per_night: number;
   max_guests: number;
   room_count: number;
   created_at: Date;

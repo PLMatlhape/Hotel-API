@@ -22,7 +22,7 @@ export const searchAccommodations = asyncHandler(
       limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
     };
 
-  const result = await accommodationService.searchAccommodations(filters as any);
+  const result: any = await accommodationService.searchAccommodations(filters as any);
 
     res.status(200).json({
       success: true,
