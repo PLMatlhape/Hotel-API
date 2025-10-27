@@ -324,7 +324,13 @@ export const getUserBookings = async (userId: string, filters: any = {}) => {
         a.address,
         a.city,
         a.country,
-        a.images[1] as featured_image,
+        (
+          SELECT p.url
+          FROM photos p
+          WHERE p.accommodation_id = a.id
+          ORDER BY p.created_at ASC
+          LIMIT 1
+        ) as featured_image,
         (
           SELECT COUNT(*)
           FROM booking_items bi
