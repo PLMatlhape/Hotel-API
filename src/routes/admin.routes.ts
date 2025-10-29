@@ -45,9 +45,14 @@ router.get('/bookings', adminController.getAllBookings);
 router.get('/analytics', adminController.getSystemAnalytics);
 
 // @route   GET /api/admin/export/bookings
-// @desc    Export booking data (admin only)
+// @desc    Export booking data (admin only) - filters via query params
 // @access  Private/Admin
 router.get('/export/bookings', adminController.exportBookings);
+
+// @route   POST /api/admin/export/bookings
+// @desc    Export booking data (admin only) - filters via request body
+// @access  Private/Admin
+router.post('/export/bookings', adminController.exportBookings);
 
 // @route   DELETE /api/admin/users/:id
 // @desc    Delete user (admin only)

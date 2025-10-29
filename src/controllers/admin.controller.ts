@@ -427,8 +427,9 @@ export const getSystemAnalytics = asyncHandler(
 // =============================================
 export const exportBookings = asyncHandler(
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    // Get query parameters for filtering
-    const { status, start_date, end_date, accommodation_id, user_id } = req.query;
+    // Get filters from query params (GET) or body (POST)
+    const filters = req.method === 'GET' ? req.query : req.body;
+    const { status, start_date, end_date, accommodation_id, user_id } = filters;
 
     // Build query conditions
     const conditions: string[] = [];
