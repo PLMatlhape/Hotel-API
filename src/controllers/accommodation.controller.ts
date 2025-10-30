@@ -106,3 +106,104 @@ export const deleteAccommodation = asyncHandler(
     });
   }
 );
+
+// =============================================
+// CREATE ROOM (ADMIN)
+// =============================================
+export const createRoom = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { accommodationId } = req.params;
+    if (!accommodationId) throw new AppError('Accommodation id is required', 400);
+
+    const room = await accommodationService.createRoom(accommodationId, req.body);
+
+    res.status(201).json({
+      success: true,
+      message: 'Room created successfully',
+      data: room,
+    });
+  }
+);
+
+// =============================================
+// UPDATE ROOM (ADMIN)
+// =============================================
+export const updateRoom = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { roomId } = req.params;
+    if (!roomId) throw new AppError('Room id is required', 400);
+
+    const room = await accommodationService.updateRoom(roomId, req.body);
+
+    res.status(200).json({
+      success: true,
+      message: 'Room updated successfully',
+      data: room,
+    });
+  }
+);
+
+// =============================================
+// GET ROOM BY ID (PUBLIC)
+// =============================================
+export const getRoomById = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { roomId } = req.params;
+    if (!roomId) throw new AppError('Room id is required', 400);
+
+    const room = await accommodationService.getRoomById(roomId);
+
+    res.status(200).json({
+      success: true,
+      data: room,
+    });
+  }
+);
+
+// =============================================
+// DELETE ROOM (ADMIN)
+// =============================================
+export const deleteRoom = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { roomId } = req.params;
+    if (!roomId) throw new AppError('Room id is required', 400);
+
+    await accommodationService.deleteRoom(roomId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Room deleted successfully',
+    });
+  }
+);
+
+// =============================================
+// GET ALL ROOMS (ADMIN)
+// =============================================
+export const getAllRoomsAdmin = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const rooms = await accommodationService.getAllRoomsAdmin();
+
+    res.status(200).json({
+      success: true,
+      data: rooms,
+    });
+  }
+);
+
+// =============================================
+// GET ROOMS BY ACCOMMODATION ID (PUBLIC)
+// =============================================
+export const getRoomsByAccommodationId = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { accommodationId } = req.params;
+    if (!accommodationId) throw new AppError('Accommodation id is required', 400);
+
+    const rooms = await accommodationService.getRoomsByAccommodationId(accommodationId);
+
+    res.status(200).json({
+      success: true,
+      data: rooms,
+    });
+  }
+);

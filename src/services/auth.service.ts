@@ -11,7 +11,8 @@ export const registerUser = async (
   email: string,
   name: string,
   password: string,
-  phone?: string
+  phone?: string,
+  role?: string
 ): Promise<{ user: User; accessToken: string; refreshToken: string }> => {
   // Check if user already exists
   const existingUser = await query(
@@ -31,7 +32,7 @@ export const registerUser = async (
     `INSERT INTO users (email, name, password_hash, phone, role, is_active)
      VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id, email, name, phone, role, created_at, updated_at, is_active`,
-    [email, name, hashedPassword, phone || null, 'user', true]
+    [email, name, hashedPassword, phone || null, role || 'user', true]
   );
 
   const user = result.rows[0];

@@ -399,3 +399,197 @@ export const deleteAccommodation = async (id: string) => {
 
   return { message: 'Accommodation deleted successfully' };
 };
+
+// =============================================
+// CREATE ROOM
+// =============================================
+export const createRoom = async (accommodationId: string, roomData: any) => {
+  // First verify accommodation exists and is active
+  const accommodationCheck = await query(
+    'SELECT id FROM accommodations WHERE id = $1 AND is_active = true',
+    [accommodationId]
+  );
+
+  if (accommodationCheck.rows.length === 0) {
+    throw new AppError('Accommodation not found', 404);
+  }
+
+  const {
+    name,
+    description,
+    capacity,
+    beds,
+    price_per_night,
+    refundable = true,
+  } = roomData;
+
+  const result = await query(
+    `INSERT INTO rooms (
+      accommodation_id, name, description, capacity, beds, price_per_night, refundable
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING *`,
+    [
+      accommodationId,
+      name,
+      description || null,
+      capacity,
+      beds || 1,
+      price_per_night,
+      refundable,
+    ]
+  );
+
+  return result.rows[0];
+};
+
+// =============================================
+// UPDATE ROOM
+// =============================================
+export const updateRoom = async (roomId: string, roomData: any) => {
+  const {
+    name,
+    description,
+    capacity,
+    beds,
+    price_per_night,
+    refundable,
+  } = roomData;
+
+  const result = await query(
+    `UPDATE rooms
+     SET name = COALESCE($1, name),
+         description = COALESCE($2, description),
+         capacity = COALESCE($3, capacity),
+         beds = COALESCE($4, beds),
+         price_per_night = COALESCE($5, price_per_night),
+         refundable = COALESCE($6, refundable),
+         updated_at = NOW()
+     WHERE id = $7
+     RETURNING *`,
+    [
+      name,
+      description,
+      capacity,
+      beds,
+      price_per_night,
+      refundable,
+      roomId,
+    ]
+  );
+
+  if (result.rows.length === 0) {
+    throw new AppError('Room not found', 404);
+  }
+
+  return result.rows[0];
+};
+
+// =============================================
+// GET ROOM BY ID
+// =============================================
+export const getRoomById = async (roomId: string) => {
+  const result = await query(
+    `SELECT
+      r.id,
+      r.accommodation_id,
+      r.name,
+      r.description,
+      r.capacity,
+      r.beds,
+      r.price_per_night,
+      r.refundable,
+      r.created_at,
+      r.updated_at,
+      a.name as accommodation_name,
+      a.city,
+      a.country
+    FROM rooms r
+    JOIN accommodations a ON r.accommodation_id = a.id
+    WHERE r.id = $1 AND a.is_active = true`,
+    [roomId]
+  );
+
+  if (result.rows.length === 0) {
+    throw new AppError('Room not found', 404);
+  }
+
+  return result.rows[0];
+};
+
+// =============================================
+// DELETE ROOM
+// =============================================
+export const deleteRoom = async (roomId: string) => {
+  const result = await query(
+    `DELETE FROM rooms WHERE id = $1 RETURNING id`,
+    [roomId]
+  );
+
+  if (result.rows.length === 0) {
+    throw new AppError('Room not found', 404);
+  }
+
+  return { message: 'Room deleted successfully' };
+};
+
+// =============================================
+// GET ALL ROOMS (ADMIN)
+// =============================================
+export const getAllRoomsAdmin = async () => {
+  const result = await query(
+    `SELECT
+      r.id,
+      r.accommodation_id,
+      r.name,
+      r.description,
+      r.capacity,
+      r.beds,
+      r.price_per_night,
+      r.refundable,
+      r.created_at,
+      r.updated_at,
+      a.name as accommodation_name,
+      a.city,
+      a.country
+    FROM rooms r
+    JOIN accommodations a ON r.accommodation_id = a.id
+    ORDER BY r.created_at DESC`
+  );
+
+  return result.rows;
+};
+
+// =============================================
+// GET ROOMS BY ACCOMMODATION ID
+// =============================================
+export const getRoomsByAccommodationId = async (accommodationId: string) => {
+  // First verify accommodation exists and is active
+  const accommodationCheck = await query(
+    'SELECT id FROM accommodations WHERE id = $1 AND is_active = true',
+    [accommodationId]
+  );
+
+  if (accommodationCheck.rows.length === 0) {
+    throw new AppError('Accommodation not found', 404);
+  }
+
+  const result = await query(
+    `SELECT
+      id,
+      accommodation_id,
+      name,
+      description,
+      capacity,
+      beds,
+      price_per_night,
+      refundable,
+      created_at,
+      updated_at
+    FROM rooms
+    WHERE accommodation_id = $1
+    ORDER BY created_at ASC`,
+    [accommodationId]
+  );
+
+  return result.rows;
+};

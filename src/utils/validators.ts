@@ -178,6 +178,37 @@ export const createRoomValidator: ValidationChain[] = [
     .withMessage('Maximum guests must be at least 1'),
 ];
 
+export const createRoomForAccommodationValidator: ValidationChain[] = [
+  param('accommodationId')
+    .isUUID()
+    .withMessage('Invalid accommodation ID'),
+  body('name')
+    .trim()
+    .notEmpty()
+    .withMessage('Room name is required')
+    .isLength({ max: 100 })
+    .withMessage('Room name must not exceed 100 characters'),
+  body('description')
+    .optional()
+    .trim()
+    .isLength({ max: 1000 })
+    .withMessage('Description must not exceed 1000 characters'),
+  body('capacity')
+    .isInt({ min: 1 })
+    .withMessage('Capacity must be at least 1'),
+  body('beds')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Beds must be at least 1'),
+  body('price_per_night')
+    .isFloat({ min: 0 })
+    .withMessage('Price per night must be a positive number'),
+  body('refundable')
+    .optional()
+    .isBoolean()
+    .withMessage('Refundable must be a boolean value'),
+];
+
 // =============================================
 // REVIEW VALIDATORS
 // =============================================
