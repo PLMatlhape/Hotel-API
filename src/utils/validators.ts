@@ -21,8 +21,9 @@ export const registerValidator: ValidationChain[] = [
     .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
   body('phone')
     .optional()
-    .isMobilePhone(['en-US'])
-    .withMessage('Please provide a valid phone number'),
+    .isLength({ min: 10, max: 10 })
+    .isNumeric()
+    .withMessage('Please provide a valid 10-digit phone number'),
 ];
 
 export const loginValidator: ValidationChain[] = [
@@ -57,6 +58,11 @@ export const createAccommodationValidator: ValidationChain[] = [
     .trim()
     .notEmpty()
     .withMessage('Country is required'),
+  body('postal_code')
+    .optional()
+    .trim()
+    .isLength({ max: 20 })
+    .withMessage('Postal code must not exceed 20 characters'),
   body('star_rating')
     .optional()
     .isInt({ min: 1, max: 5 })
@@ -69,6 +75,26 @@ export const createAccommodationValidator: ValidationChain[] = [
     .optional()
     .isFloat({ min: -180, max: 180 })
     .withMessage('Invalid longitude'),
+  body('photos')
+    .optional()
+    .isArray()
+    .withMessage('Photos must be an array'),
+  body('photos.*.url')
+    .optional()
+    .isURL()
+    .withMessage('Each photo must have a valid URL'),
+  body('photos.*.caption')
+    .optional()
+    .isString()
+    .withMessage('Photo caption must be a string'),
+  body('amenities')
+    .optional()
+    .isObject()
+    .withMessage('Amenities must be an object with categories'),
+  body('amenities.*')
+    .optional()
+    .isArray()
+    .withMessage('Each amenity category must be an array'),
 ];
 
 export const searchAccommodationValidator: ValidationChain[] = [
@@ -144,9 +170,9 @@ export const createRoomValidator: ValidationChain[] = [
     .trim()
     .notEmpty()
     .withMessage('Room type name is required'),
-  body('base_price')
+  body('price_per_night')
     .isFloat({ min: 0 })
-    .withMessage('Base price must be a positive number'),
+    .withMessage('Price per night must be a positive number'),
   body('max_guests')
     .isInt({ min: 1 })
     .withMessage('Maximum guests must be at least 1'),
@@ -195,6 +221,38 @@ export const createPaymentValidator: ValidationChain[] = [
     .withMessage('Payment method is required')
     .isIn(['card', 'stripe'])
     .withMessage('Invalid payment method'),
+];
+
+// =============================================
+// ADMIN USER UPDATE VALIDATOR
+// =============================================
+export const updateUserByAdminValidator: ValidationChain[] = [
+  body('name')
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage('Name cannot be empty')
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Name must be between 2 and 100 characters'),
+  body('email')
+    .optional()
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail(),
+  body('phone')
+    .optional()
+    .isLength({ min: 10, max: 10 })
+    .isNumeric()
+    .withMessage('Please provide a valid 10-digit phone number'),
+];
+
+// =============================================
+// ADMIN USER STATUS UPDATE VALIDATOR
+// =============================================
+export const updateUserStatusValidator: ValidationChain[] = [
+  body('is_active')
+    .isBoolean()
+    .withMessage('is_active must be a boolean value'),
 ];
 
 // =============================================

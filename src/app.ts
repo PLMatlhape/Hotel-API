@@ -87,8 +87,8 @@ app.use(cookieParser());
 app.use(requestSizeLimiter);
 
 // Body parser middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Input sanitization
 app.use(sanitizeInput);
@@ -160,6 +160,51 @@ app.get('/api/health', async (req: Request, res: Response) => {
 // API ROUTES
 // =============================================
 app.use('/api/auth', authRoutes);
+// Backwards-compatible aliases (some clients use /api/login or /api/register)
+import * as authController from './controllers/auth.controller.js';
+import { validate } from './middleware/validation.js';
+import { registerValidator, loginValidator, createAccommodationValidator } from './utils/validators.js';
+import { protect, restrictTo } from './middleware/auth.js';
+import { createAccommodation } from './controllers/accommodation.controller.js';
+import { URL } from 'url';
+
+// Normalize incoming URLs: decode percent-encoding, trim whitespace in the pathname,
+// then re-encode. This handles requests like `/api/me%20` (encoded trailing space)
+// while being defensive about malformed encoding.
+app.use((req, _res, next) => {
+  try {
+    const parsed = new URL(req.url, 'http://localhost');
+
+    // Try to decode the pathname to expose any real whitespace characters
+    let decodedPathname = parsed.pathname;
+    try {
+      decodedPathname = decodeURIComponent(parsed.pathname);
+    } catch (e) {
+      // If decode fails (malformed percent-encoding), fall back to raw pathname
+      decodedPathname = parsed.pathname;
+    }
+
+    const trimmed = decodedPathname.trim();
+    if (trimmed !== decodedPathname) {
+      // re-encode the trimmed path and preserve search/query
+      req.url = encodeURI(trimmed) + parsed.search;
+    }
+  } catch (e) {
+    // ignore and continue — do not block request on normalization errors
+  }
+
+  next();
+});
+
+app.post('/api/login', loginValidator, validate, authController.login);
+app.post('/api/register', registerValidator, validate, authController.register);
+
+// Alias for getting current user at /api/me (some clients expect this)
+app.get('/api/me', protect, authController.getCurrentUser);
+// Alias for logout at /api/logout
+app.post('/api/logout', protect, authController.logout);
+// Backwards-compatible alias for singular accommodation path
+app.post('/api/accommodation', protect, restrictTo('admin'), createAccommodationValidator, validate, createAccommodation);
 app.use('/api/accommodations', accommodationRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/payments', paymentRoutes);
@@ -197,6 +242,12 @@ app.use(errorHandler);
 // SERVER STARTUP
 // =============================================
 const startServer = async () => {
+  // Helper to attempt listening on a port and wait for success/error
+  const listenOnPort = (port: number) => new Promise<any>((resolve, reject) => {
+    const server = app.listen(port, () => resolve(server));
+    server.on('error', (err: any) => reject(err));
+  });
+
   try {
     // Test database connection
     const dbConnected = await testConnection();
@@ -204,16 +255,40 @@ const startServer = async () => {
       throw new Error('Database connection failed');
     }
 
-    // Start server
-    const server = app.listen(PORT, () => {
-      logger.info(`
+    // Attempt to start server on configured port, falling back if port is in use
+    let port = Number(process.env.PORT) || Number(PORT) || 5000;
+    const maxAttempts = 5;
+    let attempt = 0;
+    let server: any = null;
+
+    while (attempt < maxAttempts) {
+      try {
+        server = await listenOnPort(port);
+        logger.info(`Server listening on port ${port}`);
+        break;
+      } catch (err: any) {
+        if (err && err.code === 'EADDRINUSE') {
+          logger.warn(`Port ${port} is in use, trying next port...`);
+          port += 1;
+          attempt += 1;
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!server) {
+      throw new Error(`Unable to bind to a port after ${maxAttempts} attempts`);
+    }
+
+    // Log useful info using the final port
+    logger.info(`
 🚀 Server running in ${process.env.NODE_ENV || 'development'} mode
-📡 Port: ${PORT}
-🔗 Base URL: http://localhost:${PORT}
-📚 API Docs: http://localhost:${PORT}/api
-🏥 Health Check: http://localhost:${PORT}/health
-      `);
-    });
+📡 Port: ${port}
+🔗 Base URL: http://localhost:${port}
+📚 API Docs: http://localhost:${port}/api
+🏥 Health Check: http://localhost:${port}/health
+    `);
 
     // Server timeout configuration
     server.timeout = 30000; // 30 seconds

@@ -115,7 +115,7 @@ export const csrfProtection = (req: ExtendedRequest, res: Response, next: NextFu
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
     const token = req.headers['x-csrf-token'] as string;
     const sessionToken = req.session?.csrfToken;
-    
+
     if (!token || token !== sessionToken) {
       res.status(403).json({
         success: false,
@@ -142,7 +142,7 @@ const whitelistedIPs = new Set<string>(
 
 export const ipFilter = (req: ExtendedRequest, res: Response, next: NextFunction): void => {
   const clientIP = req.ip || req.connection?.remoteAddress || '';
-  
+
   if (blacklistedIPs.has(clientIP)) {
     res.status(403).json({
       success: false,
@@ -150,7 +150,7 @@ export const ipFilter = (req: ExtendedRequest, res: Response, next: NextFunction
     });
     return;
   }
-  
+
   // If whitelist is configured, only allow whitelisted IPs for admin routes
   if (whitelistedIPs.size > 0 && req.path.startsWith('/api/admin')) {
     if (!whitelistedIPs.has(clientIP)) {
@@ -161,7 +161,7 @@ export const ipFilter = (req: ExtendedRequest, res: Response, next: NextFunction
       return;
     }
   }
-  
+
   next();
 };
 
@@ -180,7 +180,7 @@ export const whitelistIP = (ip: string) => {
 export const validateContentType = (req: Request, res: Response, next: NextFunction): void => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
     const contentType = req.headers['content-type'];
-    
+
     if (!contentType || !contentType.includes('application/json')) {
       res.status(415).json({
         success: false,
@@ -250,7 +250,7 @@ export const bruteForceProtection = (req: Request, res: Response, next: NextFunc
 setInterval(() => {
   const now = Date.now();
   const oneHour = 60 * 60 * 1000;
-  
+
   for (const [key, value] of loginAttempts.entries()) {
     if (now - value.lastAttempt > oneHour) {
       loginAttempts.delete(key);
@@ -268,24 +268,75 @@ export const secureCookieOptions = {
 
 // Request size limiter
 export const requestSizeLimiter = (req: Request, res: Response, next: NextFunction): void => {
-  const contentLength = parseInt(req.headers['content-length'] || '0');
-  const maxSize = parseInt(process.env.MAX_REQUEST_SIZE || '10485760'); // 10MB default
-  
+  // Skip size check for auth endpoints, user endpoints, admin endpoints, and GET requests (which don't have bodies)
+  if (req.path.startsWith('/api/auth') || req.path.startsWith('/api/users') || req.path.startsWith('/api/admin') || req.method === 'GET') {
+    return next();
+  }
+  // Helper to parse human-friendly sizes: '10', '10mb', '50mb', '10485760', '1gb'
+  const parseSize = (sizeStr: string): number => {
+    if (!sizeStr) return 50 * 1024 * 1024; // default 50MB
+    const s = String(sizeStr).trim().toLowerCase();
+
+    // match number with optional unit
+    const match = s.match(/^(\d+(?:\.\d+)?)(b|kb|mb|gb)?$/);
+    if (!match) {
+      // fallback to 50MB
+      return 50 * 1024 * 1024;
+    }
+
+  // match[1] and match[2] are strings but may be undefined in some TS configs;
+  // guard defensively and provide defaults to satisfy strict checks.
+  const valueStr = match[1] ?? '0';
+  const value = parseFloat(valueStr);
+  const unit = match[2] || 'mb'; // treat bare numbers as megabytes
+
+    switch (unit) {
+      case 'b':
+        return Math.round(value);
+      case 'kb':
+        return Math.round(value * 1024);
+      case 'mb':
+        return Math.round(value * 1024 * 1024);
+      case 'gb':
+        return Math.round(value * 1024 * 1024 * 1024);
+      default:
+        return Math.round(value * 1024 * 1024);
+    }
+  };
+
+  const rawMax = process.env.MAX_REQUEST_SIZE || '50mb';
+  const maxSize = parseSize(rawMax);
+
+  const contentLengthHeader = req.headers['content-length'];
+  const contentLength = contentLengthHeader ? parseInt(String(contentLengthHeader), 10) : NaN;
+
+  // If there's no content-length header or it's not a number, allow the request to continue
+  if (isNaN(contentLength)) {
+    return next();
+  }
+
   if (contentLength > maxSize) {
+    const toMB = (bytes: number) => (bytes / (1024 * 1024)).toFixed(2) + 'MB';
+
     res.status(413).json({
       success: false,
-      error: 'Request entity too large'
+      error: 'Request entity too large',
+      maxSizeBytes: maxSize,
+      maxSizeHuman: toMB(maxSize),
+      currentBytes: contentLength,
+      currentHuman: toMB(contentLength),
+      note: "Set MAX_REQUEST_SIZE in .env (e.g. '100mb') to increase the limit. Bare numbers are treated as megabytes."
     });
     return;
   }
-  
+
   next();
 };
 
 // Security audit logger
 export const securityLogger = (req: ExtendedRequest, res: Response, next: NextFunction): void => {
   const securityEvents = ['POST', 'PUT', 'DELETE', 'PATCH'];
-  
+
   if (securityEvents.includes(req.method) || req.path.includes('admin')) {
     const logData = {
       timestamp: new Date().toISOString(),
@@ -296,10 +347,10 @@ export const securityLogger = (req: ExtendedRequest, res: Response, next: NextFu
       userAgent: req.headers['user-agent'],
       requestId: req.id
     };
-    
+
     // Log to your security monitoring system
     console.log('[SECURITY]', JSON.stringify(logData));
   }
-  
+
   next();
 };
