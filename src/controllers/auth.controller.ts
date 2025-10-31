@@ -8,13 +8,14 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 // =============================================
 export const register = asyncHandler(
   async (req: Request, res: Response, next: NextFunction) => {
-    const { email, name, password, phone } = req.body;
+    const { email, name, password, phone, role } = req.body;
 
     const { user, accessToken, refreshToken } = await authService.registerUser(
       email,
       name,
       password,
-      phone
+      phone,
+      role
     );
 
     return res.status(201).json({

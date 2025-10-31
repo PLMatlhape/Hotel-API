@@ -69,11 +69,12 @@ export interface Accommodation {
 export interface Room {
   id: string;
   accommodation_id: string;
-  type_name: string;
+  name: string;
   description?: string;
+  capacity: number;
+  beds?: number;
   price_per_night: number;
-  max_guests: number;
-  room_count: number;
+  refundable?: boolean;
   created_at: Date;
   updated_at: Date;
 }
