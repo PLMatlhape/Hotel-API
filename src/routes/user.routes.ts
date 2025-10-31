@@ -28,9 +28,9 @@ router.put('/password', protect, userController.updateUserPassword);
 // @access  Private
 router.delete('/account', protect, userController.deleteUserAccount);
 
-// Minimal user routes
-router.get('/me', (req, res) => {
-  res.status(501).json({ success: false, message: 'Get current user - not implemented' });
-});
+// @route   GET /api/users/me
+// @desc    Get current user (alias for /profile)
+// @access  Private
+router.get('/me', protect, userController.getUserProfile);
 
 export default router;

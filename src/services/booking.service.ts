@@ -3,6 +3,7 @@ import { CreateBookingDTO } from '../types/index.js';
 import { AppError } from '../middleware/errorHandler.js';
 import * as cache from './cache.service.js';
 import { logAudit } from '../utils/logger.js';
+import { sendBookingConfirmation, sendBookingCancellation } from './email.service.js';
 
 // =============================================
 // CREATE BOOKING (OPTIMIZED WITH LOCKING)
@@ -70,8 +71,23 @@ export const createBooking = async (userId: string, bookingData: CreateBookingDT
         // Invalidate caches
         await cache.delPattern(`${cache.CachePrefix.AVAILABILITY}*`);
 
-        // Get complete booking details
-        return await getBookingById(booking.id, client);
+        // Get complete booking details for email
+        const bookingDetails = await getBookingById(booking.id, client);
+        
+        // Send booking confirmation email (async, don't wait for it)
+        if (bookingDetails) {
+          // Get user details for email
+          const userResult = await client.query('SELECT * FROM users WHERE id = $1', [userId]);
+          const user = userResult.rows[0];
+          
+          if (user) {
+            sendBookingConfirmation(user, bookingDetails, { name: 'Accommodation', type: 'Room' }).catch(error => {
+              console.error('Failed to send booking confirmation email:', error);
+            });
+          }
+        }
+
+        return bookingDetails;
       });
     },
     15000 // 15 second lock timeout
@@ -438,6 +454,17 @@ export const cancelBooking = async (bookingId: string, userId: string, reason?: 
       booking_id: bookingId,
       reason,
     });
+
+    // Send cancellation email (async, don't wait for it)
+    const userResult = await client.query('SELECT * FROM users WHERE id = $1', [userId]);
+    const user = userResult.rows[0];
+    
+    if (user) {
+      const refundInfo = paymentResult.rows.length > 0 ? 'Refund will be processed within 5-7 business days' : undefined;
+      sendBookingCancellation(user, booking, refundInfo).catch(error => {
+        console.error('Failed to send booking cancellation email:', error);
+      });
+    }
 
     // Invalidate caches
     await cache.del(`${cache.CachePrefix.BOOKING}${bookingId}`);

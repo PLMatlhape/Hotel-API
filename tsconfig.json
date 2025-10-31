@@ -21,7 +21,7 @@
     "noImplicitThis": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "exactOptionalPropertyTypes": true,
+    "exactOptionalPropertyTypes": false,
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": false,
     "noUncheckedIndexedAccess": true,
@@ -32,13 +32,9 @@
     "isolatedModules": true,
     "moduleDetection": "force",
     "types": [
-      "node",
-      "@paypal__checkout-server-sdk",
-      "flutterwave-node-v3",
-      "xss-clean"
+      "node"
     ],
     "typeRoots": [
-      "./types",
       "./node_modules/@types"
     ],
     "baseUrl": "./",
@@ -55,7 +51,6 @@
   },
   "include": [
     "src/**/*",
-    "types/**/*",
     "global.d.ts"
   ],
   "exclude": [

@@ -567,6 +567,96 @@ export const exportBookings = asyncHandler(
 );
 
 // =============================================
+// GET DASHBOARD STATS (ADMIN ONLY)
+// =============================================
+export const getDashboardStats = asyncHandler(
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    // Get total bookings
+    const bookingsQuery = `SELECT COUNT(*) as total FROM bookings`;
+    const bookingsResult = await query(bookingsQuery);
+    const totalBookings = parseInt(bookingsResult.rows[0].total);
+
+    // Get total revenue
+    const revenueQuery = `SELECT COALESCE(SUM(total_amount), 0) as total FROM bookings WHERE status != 'cancelled'`;
+    const revenueResult = await query(revenueQuery);
+    const totalRevenue = parseFloat(revenueResult.rows[0].total);
+
+    // Get total guests
+    const guestsQuery = `SELECT COALESCE(SUM(guest_count), 0) as total FROM bookings WHERE status != 'cancelled'`;
+    const guestsResult = await query(guestsQuery);
+    const totalGuests = parseInt(guestsResult.rows[0].total);
+
+    // Calculate occupancy rate (assuming 100 total rooms)
+    const occupiedRoomsQuery = `
+      SELECT COUNT(DISTINCT accommodation_id) as occupied
+      FROM bookings
+      WHERE status = 'confirmed'
+      AND checkin_date <= CURRENT_DATE
+      AND checkout_date >= CURRENT_DATE
+    `;
+    const occupiedResult = await query(occupiedRoomsQuery);
+    const occupiedRooms = parseInt(occupiedResult.rows[0].occupied);
+    const totalRoomsQuery = `SELECT COUNT(*) as total FROM accommodations`;
+    const totalRoomsResult = await query(totalRoomsQuery);
+    const totalRooms = parseInt(totalRoomsResult.rows[0].total) || 1;
+    const occupancyRate = Math.round((occupiedRooms / totalRooms) * 100);
+
+    // Get average rating (mock for now, would need a reviews table)
+    const averageRating = 4.8;
+
+    // Get booking trends for last 6 months
+    const trendsQuery = `
+      SELECT
+        TO_CHAR(created_at, 'Mon') as month,
+        COUNT(*) as bookings,
+        COALESCE(SUM(total_amount), 0) as revenue
+      FROM bookings
+      WHERE created_at >= CURRENT_DATE - INTERVAL '6 months'
+      GROUP BY TO_CHAR(created_at, 'Mon'), DATE_TRUNC('month', created_at)
+      ORDER BY DATE_TRUNC('month', created_at) ASC
+    `;
+    const trendsResult = await query(trendsQuery);
+
+    // Get recent bookings
+    const recentQuery = `
+      SELECT
+        b.id,
+        u.name as guest,
+        a.name as room,
+        b.checkin_date as "checkIn",
+        CONCAT('R ', b.total_amount) as amount,
+        b.status
+      FROM bookings b
+      INNER JOIN users u ON b.user_id = u.id
+      INNER JOIN accommodations a ON b.accommodation_id = a.id
+      ORDER BY b.created_at DESC
+      LIMIT 5
+    `;
+    const recentResult = await query(recentQuery);
+
+    const dashboardStats = {
+      totalBookings,
+      totalRevenue,
+      totalGuests,
+      occupancyRate,
+      averageRating,
+      bookingTrends: trendsResult.rows.map((row: any) => ({
+        month: row.month,
+        bookings: parseInt(row.bookings),
+        revenue: parseFloat(row.revenue)
+      })),
+      recentBookings: recentResult.rows,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: dashboardStats,
+      message: 'Dashboard stats retrieved successfully',
+    });
+  }
+);
+
+// =============================================
 // DELETE USER (ADMIN ONLY)
 // =============================================
 export const deleteUser = asyncHandler(

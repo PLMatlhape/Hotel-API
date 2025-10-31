@@ -15,8 +15,9 @@
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
-    "migrate": "node scripts/migrate.js",
-    "seed": "node scripts/seed.js",
+    "migrate": "node --loader ts-node/esm scripts/migrate.js",
+    "seed": "node --loader ts-node/esm scripts/seed.js",
+    "db:reset": "node --loader ts-node/esm scripts/seed.js --reset",
     "docker:build": "docker build -t hotel-booking-api .",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down"
@@ -111,6 +112,7 @@
     "supertest": "^6.3.3",
     "ts-jest": "^29.1.1",
     "ts-node": "^10.9.2",
+    "tsx": "^4.20.6",
     "typescript": "^5.3.3"
   }
 }

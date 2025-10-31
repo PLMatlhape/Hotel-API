@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import slowDown from 'express-slow-down';
 import helmet from 'helmet';
 import mongoSanitize from 'express-mongo-sanitize';
+// @ts-ignore - xss-clean doesn't have official types
 import xss from 'xss-clean';
 import hpp from 'hpp';
 import crypto from 'crypto';

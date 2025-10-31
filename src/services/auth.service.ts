@@ -3,6 +3,7 @@ import { query } from '../config/database.js';
 import { User, OAuthProvider } from '../types/index.js';
 import { generateAccessToken, generateRefreshToken } from '../utils/jwt.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { sendWelcomeEmail } from './email.service.js';
 
 // =============================================
 // USER REGISTRATION
@@ -37,6 +38,11 @@ export const registerUser = async (
 
   const user = result.rows[0];
 
+  // Send welcome email (async, don't wait for it)
+  sendWelcomeEmail(user).catch(error => {
+    console.error('Failed to send welcome email:', error);
+  });
+
   // Generate tokens
   const accessToken = generateAccessToken({
     id: user.id,
@@ -60,6 +66,14 @@ export const loginUser = async (
   email: string,
   password: string
 ): Promise<{ user: User; accessToken: string; refreshToken: string }> => {
+  // DEBUG: Log login attempt
+  console.log('🔍 Login attempt:', {
+    email,
+    passwordLength: password?.length,
+    passwordFirstChar: password?.[0],
+    passwordLastChar: password?.[password?.length - 1]
+  });
+
   // Find user by email
   const result = await query(
     `SELECT id, email, name, phone, password_hash, role, created_at, updated_at, is_active
@@ -69,25 +83,36 @@ export const loginUser = async (
   );
 
   if (result.rows.length === 0) {
+    console.log('❌ No user found with email:', email);
     throw new AppError('Invalid email or password', 401);
   }
 
   const user = result.rows[0];
+  console.log('✅ User found:', { email: user.email, role: user.role, is_active: user.is_active });
 
   // Check if user is active
   if (!user.is_active) {
+    console.log('❌ User account is not active');
     throw new AppError('Your account has been deactivated', 403);
   }
 
   // Check if password exists (OAuth users might not have password)
   if (!user.password_hash) {
+    console.log('❌ No password hash found for user');
     throw new AppError('Please log in using OAuth provider', 401);
   }
+
+  console.log('🔐 Comparing password with hash...');
+  console.log('  Password:', password);
+  console.log('  Hash:', user.password_hash);
 
   // Verify password
   const isPasswordValid = await bcrypt.compare(password, user.password_hash);
 
+  console.log('🔐 Password comparison result:', isPasswordValid);
+
   if (!isPasswordValid) {
+    console.log('❌ Password does not match');
     throw new AppError('Invalid email or password', 401);
   }
 

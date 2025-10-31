@@ -260,6 +260,27 @@ export const createPaymentValidator: ValidationChain[] = [
     .withMessage('Invalid payment method'),
 ];
 
+export const createPaymentIntentValidator: ValidationChain[] = [
+  body('bookingId')
+    .notEmpty()
+    .withMessage('Booking ID is required')
+    .isUUID()
+    .withMessage('Invalid booking ID'),
+  body('provider')
+    .notEmpty()
+    .withMessage('Payment provider is required')
+    .isIn(['stripe', 'paypal', 'flutterwave'])
+    .withMessage('Invalid payment provider. Must be stripe, paypal, or flutterwave'),
+  body('currency')
+    .optional()
+    .isIn(['USD', 'EUR', 'GBP', 'NGN', 'ZAR'])
+    .withMessage('Invalid currency'),
+  body('metadata')
+    .optional()
+    .isObject()
+    .withMessage('Metadata must be an object'),
+];
+
 // =============================================
 // ADMIN USER UPDATE VALIDATOR
 // =============================================

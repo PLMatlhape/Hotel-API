@@ -29,10 +29,15 @@ const paypalEnvironment = process.env.PAYPAL_MODE === 'live'
 const paypalClient = new Paypal.core.PayPalHttpClient(paypalEnvironment);
 
 // Flutterwave configuration
-const flutterwave = new Flutterwave(
-  process.env.FLW_PUBLIC_KEY || '',
-  process.env.FLW_SECRET_KEY || ''
-);
+const flutterwavePublicKey = process.env.FLW_PUBLIC_KEY;
+const flutterwaveSecretKey = process.env.FLW_SECRET_KEY;
+
+let flutterwave: any = null;
+if (flutterwavePublicKey && flutterwaveSecretKey) {
+  flutterwave = new Flutterwave(flutterwavePublicKey, flutterwaveSecretKey);
+} else {
+  console.warn('Flutterwave credentials not configured. Flutterwave payment service will not work.');
+}
 
 // Payment provider interface
 interface PaymentProvider {
@@ -153,6 +158,10 @@ class PayPalProvider implements PaymentProvider {
 // Flutterwave provider implementation
 class FlutterwaveProvider implements PaymentProvider {
   async createIntent(amount: number, currency: string, metadata: any) {
+    if (!flutterwave) {
+      throw new AppError('Flutterwave payment service is not configured', 503);
+    }
+    
     const payload = {
       tx_ref: `hotel_${Date.now()}`,
       amount,
@@ -181,6 +190,10 @@ class FlutterwaveProvider implements PaymentProvider {
   }
 
   async verifyPayment(reference: string) {
+    if (!flutterwave) {
+      throw new AppError('Flutterwave payment service is not configured', 503);
+    }
+    
     const response = await flutterwave.Transaction.verify({ id: reference });
     
     return {
@@ -192,6 +205,10 @@ class FlutterwaveProvider implements PaymentProvider {
   }
 
   async refund(reference: string, amount?: number) {
+    if (!flutterwave) {
+      throw new AppError('Flutterwave payment service is not configured', 503);
+    }
+    
     const payload: any = { id: reference };
     if (amount) payload.amount = amount;
 

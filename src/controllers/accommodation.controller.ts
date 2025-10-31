@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from '../types/index.js';
 import * as accommodationService from '../services/accommodation.service.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
+import { processImages } from '../middleware/upload.js';
 
 // =============================================
 // SEARCH ACCOMMODATIONS
@@ -56,8 +57,19 @@ export const createAccommodation = asyncHandler(
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     const ownerId = req.user?.id;
 
+    // Process uploaded images
+    let imageUrls: string[] = [];
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      imageUrls = await processImages(req.files, 'accommodations');
+    }
+
+    const accommodationData = {
+      ...req.body,
+      photos: imageUrls.length > 0 ? imageUrls : undefined,
+    };
+
     const accommodation = await accommodationService.createAccommodation(
-      req.body,
+      accommodationData,
       ownerId
     );
 
@@ -77,9 +89,20 @@ export const updateAccommodation = asyncHandler(
     const { id } = req.params;
     if (!id) throw new AppError('Accommodation id is required', 400);
 
+    // Process uploaded images
+    let imageUrls: string[] = [];
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      imageUrls = await processImages(req.files, 'accommodations');
+    }
+
+    const accommodationData = {
+      ...req.body,
+      photos: imageUrls.length > 0 ? imageUrls : undefined,
+    };
+
     const accommodation = await accommodationService.updateAccommodation(
       id,
-      req.body
+      accommodationData
     );
 
     res.status(200).json({
@@ -115,7 +138,18 @@ export const createRoom = asyncHandler(
     const { accommodationId } = req.params;
     if (!accommodationId) throw new AppError('Accommodation id is required', 400);
 
-    const room = await accommodationService.createRoom(accommodationId, req.body);
+    // Process uploaded images
+    let imageUrls: string[] = [];
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      imageUrls = await processImages(req.files, 'rooms');
+    }
+
+    const roomData = {
+      ...req.body,
+      photos: imageUrls.length > 0 ? imageUrls : undefined,
+    };
+
+    const room = await accommodationService.createRoom(accommodationId, roomData);
 
     res.status(201).json({
       success: true,
@@ -133,7 +167,18 @@ export const updateRoom = asyncHandler(
     const { roomId } = req.params;
     if (!roomId) throw new AppError('Room id is required', 400);
 
-    const room = await accommodationService.updateRoom(roomId, req.body);
+    // Process uploaded images
+    let imageUrls: string[] = [];
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      imageUrls = await processImages(req.files, 'rooms');
+    }
+
+    const roomData = {
+      ...req.body,
+      photos: imageUrls.length > 0 ? imageUrls : undefined,
+    };
+
+    const room = await accommodationService.updateRoom(roomId, roomData);
 
     res.status(200).json({
       success: true,

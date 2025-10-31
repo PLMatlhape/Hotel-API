@@ -39,6 +39,11 @@ router.put('/users/:id/status', uuidParamValidator(), updateUserStatusValidator,
 // @access  Private/Admin
 router.get('/bookings', adminController.getAllBookings);
 
+// @route   GET /api/admin/dashboard-stats
+// @desc    Get dashboard statistics (admin only)
+// @access  Private/Admin
+router.get('/dashboard-stats', adminController.getDashboardStats);
+
 // @route   GET /api/admin/analytics
 // @desc    Get system analytics (admin only)
 // @access  Private/Admin

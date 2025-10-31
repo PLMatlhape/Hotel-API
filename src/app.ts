@@ -6,6 +6,11 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import RedisStore from 'connect-redis';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables
 dotenv.config();
@@ -33,6 +38,7 @@ import {
 
 // Import routes
 import authRoutes from './routes/auth.routes.js';
+import oauthRoutes from './routes/oauth.routes.js';
 import accommodationRoutes from './routes/accommodation.routes.js';
 import bookingRoutes from './routes/booking.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
@@ -124,6 +130,11 @@ app.use('/api/', validateContentType);
 app.use('/api/', securityLoggerMiddleware);
 
 // =============================================
+// STATIC FILES - Serve uploaded images
+// =============================================
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// =============================================
 // HEALTH CHECK ENDPOINTS
 // =============================================
 app.get('/health', (req: Request, res: Response) => {
@@ -205,6 +216,7 @@ app.get('/api/me', protect, authController.getCurrentUser);
 app.post('/api/logout', protect, authController.logout);
 // Backwards-compatible alias for singular accommodation path
 app.post('/api/accommodation', protect, restrictTo('admin'), createAccommodationValidator, validate, createAccommodation);
+app.use('/api/oauth', oauthRoutes);
 app.use('/api/accommodations', accommodationRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/payments', paymentRoutes);
@@ -249,11 +261,17 @@ const startServer = async () => {
   });
 
   try {
+    console.log('🔄 Starting server...');
+    console.log('📊 Testing database connection...');
+    
     // Test database connection
     const dbConnected = await testConnection();
     if (!dbConnected) {
+      console.error('❌ Database connection failed!');
       throw new Error('Database connection failed');
     }
+    
+    console.log('✅ Database connected successfully!');
 
     // Attempt to start server on configured port, falling back if port is in use
     let port = Number(process.env.PORT) || Number(PORT) || 5000;
@@ -264,6 +282,7 @@ const startServer = async () => {
     while (attempt < maxAttempts) {
       try {
         server = await listenOnPort(port);
+        console.log(`✅ Server listening on port ${port}`);
         logger.info(`Server listening on port ${port}`);
         break;
       } catch (err: any) {
@@ -282,13 +301,17 @@ const startServer = async () => {
     }
 
     // Log useful info using the final port
-    logger.info(`
+    const serverInfo = `
 🚀 Server running in ${process.env.NODE_ENV || 'development'} mode
 📡 Port: ${port}
 🔗 Base URL: http://localhost:${port}
 📚 API Docs: http://localhost:${port}/api
 🏥 Health Check: http://localhost:${port}/health
-    `);
+🔗 Database: ${process.env.DB_NAME || 'Not configured'}
+    `;
+    
+    console.log(serverInfo);
+    logger.info(serverInfo);
 
     // Server timeout configuration
     server.timeout = 30000; // 30 seconds
@@ -334,6 +357,7 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error: Error) => {
+  console.error('❌ UNCAUGHT EXCEPTION:', error);
   logger.error('❌ UNCAUGHT EXCEPTION! Shutting down...', {
     error: error.message,
     stack: error.stack,
@@ -343,6 +367,7 @@ process.on('uncaughtException', (error: Error) => {
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason: any) => {
+  console.error('❌ UNHANDLED REJECTION:', reason);
   logger.error('❌ UNHANDLED REJECTION! Shutting down...', {
     reason: reason instanceof Error ? reason.message : reason,
     stack: reason instanceof Error ? reason.stack : undefined,
@@ -360,6 +385,19 @@ process.on('warning', (warning) => {
 });
 
 // Start the server
-startServer();
+(async () => {
+  console.log('🚀 Application starting...');
+  console.log('📁 Working directory:', process.cwd());
+  console.log('🔧 Node version:', process.version);
+  console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
+  
+  try {
+    await startServer();
+  } catch (error) {
+    console.error('❌ Fatal error during startup:', error);
+    logger.error('Fatal startup error:', error);
+    process.exit(1);
+  }
+})();
 
 export default app;

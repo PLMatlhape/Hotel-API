@@ -161,6 +161,15 @@ export const batchQuery = async (queries: Array<{ text: string; params?: any[] }
 
 // Health check with detailed info
 export const testConnection = async (): Promise<boolean> => {
+  console.log('🔍 Testing database connection...');
+  console.log('📋 Database config:', {
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    passwordSet: !!config.password
+  });
+  
   try {
     const result = await query('SELECT NOW(), version(), current_database()');
     console.log('✅ Database connection successful:', {
