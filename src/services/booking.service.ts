@@ -8,7 +8,7 @@ import { logAudit } from '../utils/logger.js';
 // CREATE BOOKING (OPTIMIZED WITH LOCKING)
 // =============================================
 export const createBooking = async (userId: string, bookingData: CreateBookingDTO) => {
-  const { accommodation_id, checkin_date, checkout_date, guest_count, rooms, notes } = bookingData;
+  const { accommodation_id, checkin_date, checkout_date, guest_count, total_amount, notes } = bookingData;
   
   // Use distributed lock to prevent race conditions
   return cache.withLock(
@@ -24,185 +24,39 @@ export const createBooking = async (userId: string, bookingData: CreateBookingDT
           throw new AppError('Invalid date range', 400);
         }
 
-        // Batch fetch all room details
-        const roomIds = rooms.map(r => r.room_id);
-        const roomsResult = await client.query(
-          `SELECT r.*, 
-            (SELECT COUNT(*) FROM room_inventory WHERE room_id = r.id) as has_inventory
-           FROM rooms r 
-           WHERE r.id = ANY($1) AND r.accommodation_id = $2`,
-          [roomIds, accommodation_id]
-        );
-
-        if (roomsResult.rows.length !== roomIds.length) {
-          throw new AppError('One or more rooms not found', 404);
-        }
-
-        const roomMap = new Map(roomsResult.rows.map(r => [r.id, r]));
-
-        // Check availability for all rooms in a single query
-        const availabilityCheck = await client.query(
-          `
-          WITH RECURSIVE date_series AS (
-            SELECT $1::date as check_date
-            UNION ALL
-            SELECT (check_date + interval '1 day')::date
-            FROM date_series
-            WHERE check_date < $2::date - interval '1 day'
-          ),
-          booked_units AS (
-            SELECT 
-              bi.room_id,
-              ds.check_date,
-              COALESCE(SUM(bi.quantity), 0) as booked
-            FROM date_series ds
-            CROSS JOIN unnest($3::uuid[]) as bi(room_id)
-            LEFT JOIN bookings b ON 
-              b.checkin_date <= ds.check_date AND
-              b.checkout_date > ds.check_date AND
-              b.status NOT IN ('cancelled')
-            LEFT JOIN booking_items bi2 ON b.id = bi2.booking_id AND bi2.room_id = bi.room_id
-            GROUP BY bi.room_id, ds.check_date
-          ),
-          inventory_check AS (
-            SELECT 
-              bu.room_id,
-              bu.check_date,
-              COALESCE(ri.available_units, r.default_units, 10) as available,
-              bu.booked,
-              COALESCE(ri.available_units, r.default_units, 10) - bu.booked as remaining
-            FROM booked_units bu
-            INNER JOIN rooms r ON bu.room_id = r.id
-            LEFT JOIN room_inventory ri ON ri.room_id = bu.room_id AND ri.date = bu.check_date
-          )
-          SELECT 
-            room_id,
-            MIN(remaining) as min_available
-          FROM inventory_check
-          GROUP BY room_id
-          `,
-          [checkin_date, checkout_date, roomIds]
-        );
-
-        // Validate availability
-        const availabilityMap = new Map(
-          availabilityCheck.rows.map(r => [r.room_id, r.min_available])
-        );
-
-        for (const room of rooms) {
-          const available = availabilityMap.get(room.room_id) || 0;
-          const roomData = roomMap.get(room.room_id);
-          
-          if (available < room.quantity) {
-            throw new AppError(
-              `Insufficient availability for ${roomData?.name}. Available: ${available}, Requested: ${room.quantity}`,
-              400
-            );
-          }
-        }
-
-        // Calculate total amount
-        let totalAmount = 0;
-        const bookingItems = [];
-
-        for (const room of rooms) {
-          const roomData = roomMap.get(room.room_id);
-          const itemCost = roomData.price_per_night * nights * room.quantity;
-          totalAmount += itemCost;
-
-          bookingItems.push({
-            room_id: room.room_id,
-            price_per_night: roomData.price_per_night,
-            nights,
-            quantity: room.quantity,
-          });
-        }
+        // For accommodation-level bookings, we don't need room-specific logic
+        // The total_amount is provided directly in the request
 
         // Create booking
         const bookingResult = await client.query(
           `INSERT INTO bookings (
             user_id, accommodation_id, status, total_amount, currency,
-            checkin_date, checkout_date, guest_count, notes, confirmation_code
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            checkin_date, checkout_date, guest_count, notes
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           RETURNING *`,
           [
             userId,
             accommodation_id,
             'pending',
-            totalAmount,
+            total_amount,
             'ZAR',
             checkin_date,
             checkout_date,
             guest_count,
             notes || null,
-            generateConfirmationCode(),
           ]
         );
 
         const booking = bookingResult.rows[0];
 
-        // Batch insert booking items
-        const itemValues = bookingItems.map((item, idx) => {
-          const offset = idx * 5;
-          return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`;
-        }).join(', ');
-
-        const itemParams = bookingItems.flatMap(item => [
-          booking.id,
-          item.room_id,
-          item.price_per_night,
-          item.nights,
-          item.quantity,
-        ]);
-
-        await client.query(
-          `INSERT INTO booking_items (booking_id, room_id, price_per_night, nights, quantity)
-           VALUES ${itemValues}`,
-          itemParams
-        );
-
-        // Batch update inventory
-        const inventoryUpdates = [];
-        for (const item of bookingItems) {
-          let currentDate = new Date(checkin);
-          while (currentDate < checkout) {
-            const dateStr = currentDate.toISOString().split('T')[0];
-            inventoryUpdates.push({
-              room_id: item.room_id,
-              date: dateStr,
-              quantity: item.quantity,
-            });
-            currentDate.setDate(currentDate.getDate() + 1);
-          }
-        }
-
-        // Use ON CONFLICT to handle inventory updates efficiently
-        for (const update of inventoryUpdates) {
-          await client.query(
-            `INSERT INTO room_inventory (room_id, date, available_units)
-             VALUES ($1, $2, 
-               (SELECT COALESCE(
-                 (SELECT available_units FROM room_inventory WHERE room_id = $1 AND date = $2),
-                 (SELECT default_units FROM rooms WHERE id = $1),
-                 10
-               ) - $3)
-             )
-             ON CONFLICT (room_id, date)
-             DO UPDATE SET available_units = room_inventory.available_units - $3
-             WHERE room_inventory.available_units >= $3`,
-            [update.room_id, update.date, update.quantity]
-          );
-        }
-
         // Create notification
         await client.query(
-          `INSERT INTO notifications (user_id, type, message, metadata)
-           VALUES ($1, $2, $3, $4)`,
+          `INSERT INTO notifications (user_id, type, message)
+           VALUES ($1, $2, $3)`,
           [
             userId,
             'booking_confirmation',
-            `Your booking (${booking.confirmation_code}) has been created successfully.`,
-            JSON.stringify({ booking_id: booking.id }),
+            `Your booking has been created successfully.`,
           ]
         );
 
@@ -210,14 +64,14 @@ export const createBooking = async (userId: string, bookingData: CreateBookingDT
         logAudit(userId, 'CREATE_BOOKING', {
           booking_id: booking.id,
           accommodation_id,
-          total_amount: totalAmount,
+          total_amount,
         });
 
         // Invalidate caches
         await cache.delPattern(`${cache.CachePrefix.AVAILABILITY}*`);
 
         // Get complete booking details
-        return await getBookingById(booking.id);
+        return await getBookingById(booking.id, client);
       });
     },
     15000 // 15 second lock timeout
@@ -227,15 +81,15 @@ export const createBooking = async (userId: string, bookingData: CreateBookingDT
 // =============================================
 // GET BOOKING BY ID (WITH CACHING)
 // =============================================
-export const getBookingById = async (bookingId: string) => {
+export const getBookingById = async (bookingId: string, client?: any) => {
   const cacheKey = `${cache.CachePrefix.BOOKING}${bookingId}`;
   const cached = await cache.get(cacheKey);
-  
+
   if (cached) {
     return cached;
   }
 
-  const result = await query(
+  const result = client ? await client.query(
     `SELECT
       b.*,
       a.name as accommodation_name,
@@ -260,23 +114,68 @@ export const getBookingById = async (bookingId: string) => {
         WHERE bi.booking_id = b.id
       ) as items,
       (
-        SELECT json_agg(json_build_object(
-          'id', p.id,
-          'provider', p.provider,
-          'status', p.status,
-          'amount', p.amount,
-          'currency', p.currency,
-          'transaction_id', p.transaction_id,
-          'created_at', p.created_at
-        ))
+        SELECT json_agg(
+          json_build_object(
+            'id', p.id,
+            'provider', p.payment_provider,
+            'status', p.status,
+            'amount', p.amount,
+            'currency', p.currency,
+            'transaction_id', p.provider_reference,
+            'created_at', p.created_at
+          ) ORDER BY p.created_at DESC
+        )
         FROM payments p
         WHERE p.booking_id = b.id
-        ORDER BY p.created_at DESC
       ) as payments
     FROM bookings b
     INNER JOIN accommodations a ON b.accommodation_id = a.id
     INNER JOIN users u ON b.user_id = u.id
-    WHERE b.id = $1`,
+    WHERE b.id = $1 AND a.is_active = true`,
+    [bookingId]
+  ) : await query(
+    `SELECT
+      b.*,
+      a.name as accommodation_name,
+      a.address,
+      a.city,
+      a.country,
+      u.name as user_name,
+      u.email as user_email,
+      u.phone as user_phone,
+      (
+        SELECT json_agg(json_build_object(
+          'id', bi.id,
+          'room_id', bi.room_id,
+          'room_name', r.name,
+          'price_per_night', bi.price_per_night,
+          'nights', bi.nights,
+          'quantity', bi.quantity,
+          'subtotal', bi.price_per_night * bi.nights * bi.quantity
+        ))
+        FROM booking_items bi
+        INNER JOIN rooms r ON bi.room_id = r.id
+        WHERE bi.booking_id = b.id
+      ) as items,
+      (
+        SELECT json_agg(
+          json_build_object(
+            'id', p.id,
+            'provider', p.payment_provider,
+            'status', p.status,
+            'amount', p.amount,
+            'currency', p.currency,
+            'transaction_id', p.provider_reference,
+            'created_at', p.created_at
+          ) ORDER BY p.created_at DESC
+        )
+        FROM payments p
+        WHERE p.booking_id = b.id
+      ) as payments
+    FROM bookings b
+    INNER JOIN accommodations a ON b.accommodation_id = a.id
+    INNER JOIN users u ON b.user_id = u.id
+    WHERE b.id = $1 AND a.is_active = true`,
     [bookingId]
   );
 
@@ -285,10 +184,10 @@ export const getBookingById = async (bookingId: string) => {
   }
 
   const booking = result.rows[0];
-  
+
   // Cache for 5 minutes
   await cache.set(cacheKey, booking, 300);
-  
+
   return booking;
 };
 
@@ -296,12 +195,12 @@ export const getBookingById = async (bookingId: string) => {
 // GET USER BOOKINGS (WITH PAGINATION)
 // =============================================
 export const getUserBookings = async (userId: string, filters: any = {}) => {
-  const { 
-    page = 1, 
-    limit = 10, 
-    status, 
-    sort_by = 'created_at', 
-    sort_order = 'DESC' 
+  const {
+    page = 1,
+    limit = 10,
+    status,
+    sort_by = 'created_at',
+    sort_order = 'DESC'
   } = filters;
 
   const offset = (page - 1) * limit;
@@ -345,7 +244,7 @@ export const getUserBookings = async (userId: string, filters: any = {}) => {
         ), 'unpaid') as payment_status
       FROM bookings b
       INNER JOIN accommodations a ON b.accommodation_id = a.id
-      WHERE ${whereClause}
+      WHERE ${whereClause} AND a.is_active = true
       ${orderClause}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, limit, offset]
@@ -353,7 +252,8 @@ export const getUserBookings = async (userId: string, filters: any = {}) => {
     query(
       `SELECT COUNT(*) as total
        FROM bookings b
-       WHERE ${whereClause}`,
+       INNER JOIN accommodations a ON b.accommodation_id = a.id
+       WHERE ${whereClause} AND a.is_active = true`,
       params
     )
   ]);
@@ -417,13 +317,12 @@ export const updateBookingStatus = async (bookingId: string, status: string, use
 
     // Create status change notification
     await client.query(
-      `INSERT INTO notifications (user_id, type, message, metadata)
-       VALUES ($1, $2, $3, $4)`,
+      `INSERT INTO notifications (user_id, type, message)
+       VALUES ($1, $2, $3)`,
       [
         booking.user_id,
         'booking_status_change',
         `Your booking status has been updated to: ${status}`,
-        JSON.stringify({ booking_id: bookingId, status }),
       ]
     );
 
@@ -509,31 +408,28 @@ export const cancelBooking = async (bookingId: string, userId: string, reason?: 
       // Create refund record
       await client.query(
         `INSERT INTO payments (
-          booking_id, provider, type, status, amount, currency,
-          transaction_id, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          booking_id, payment_provider, status, amount, currency,
+          provider_reference
+        ) VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           bookingId,
-          payment.provider,
-          'refund',
+          payment.payment_provider,
           'pending',
           payment.amount,
           payment.currency,
-          `refund_${payment.transaction_id}`,
-          JSON.stringify({ original_payment_id: payment.id, reason }),
+          `refund_${payment.provider_reference}`,
         ]
       );
     }
 
     // Create cancellation notification
     await client.query(
-      `INSERT INTO notifications (user_id, type, message, metadata)
-       VALUES ($1, $2, $3, $4)`,
+      `INSERT INTO notifications (user_id, type, message)
+       VALUES ($1, $2, $3)`,
       [
         userId,
         'booking_cancelled',
-        `Your booking (${booking.confirmation_code}) has been cancelled successfully.`,
-        JSON.stringify({ booking_id: bookingId, reason }),
+        `Your booking has been cancelled successfully.`,
       ]
     );
 
@@ -701,6 +597,109 @@ function generateConfirmationCode(): string {
   }
   return code;
 }
+
+// =============================================
+// UPDATE USER BOOKING
+// =============================================
+export const updateUserBooking = async (bookingId: string, userId: string, updateData: any) => {
+  return transaction(async (client) => {
+    // First, check if booking exists and belongs to user
+    const bookingResult = await client.query(
+      'SELECT * FROM bookings WHERE id = $1 AND user_id = $2',
+      [bookingId, userId]
+    );
+
+    if (bookingResult.rows.length === 0) {
+      throw new AppError('Booking not found or access denied', 404);
+    }
+
+    const booking = bookingResult.rows[0];
+
+    // Check if booking can be updated (only pending bookings)
+    if (booking.status !== 'pending') {
+      throw new AppError('Only pending bookings can be updated', 400);
+    }
+
+    // Check if check-in date is in the future (at least 24 hours from now)
+    const checkinDate = new Date(booking.checkin_date);
+    const now = new Date();
+    const hoursUntilCheckin = (checkinDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+    if (hoursUntilCheckin < 24) {
+      throw new AppError('Bookings cannot be updated within 24 hours of check-in', 400);
+    }
+
+    // Build update query dynamically
+    const updateFields = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (updateData.checkin_date !== undefined) {
+      updateFields.push(`checkin_date = $${paramIndex}`);
+      params.push(updateData.checkin_date);
+      paramIndex++;
+    }
+
+    if (updateData.checkout_date !== undefined) {
+      updateFields.push(`checkout_date = $${paramIndex}`);
+      params.push(updateData.checkout_date);
+      paramIndex++;
+    }
+
+    if (updateData.guest_count !== undefined) {
+      updateFields.push(`guest_count = $${paramIndex}`);
+      params.push(updateData.guest_count);
+      paramIndex++;
+    }
+
+    if (updateData.notes !== undefined) {
+      updateFields.push(`notes = $${paramIndex}`);
+      params.push(updateData.notes);
+      paramIndex++;
+    }
+
+    if (updateFields.length === 0) {
+      throw new AppError('No valid fields to update', 400);
+    }
+
+    // Add updated_at timestamp
+    updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+
+    // Execute update
+    params.push(bookingId);
+    const updateQuery = `
+      UPDATE bookings
+      SET ${updateFields.join(', ')}
+      WHERE id = $${paramIndex}
+      RETURNING *
+    `;
+
+    const result = await client.query(updateQuery, params);
+
+    // Create update notification
+    await client.query(
+      `INSERT INTO notifications (user_id, type, message)
+       VALUES ($1, $2, $3)`,
+      [
+        userId,
+        'booking_updated',
+        `Your booking has been updated successfully.`,
+      ]
+    );
+
+    // Log audit trail
+    logAudit(userId, 'UPDATE_USER_BOOKING', {
+      booking_id: bookingId,
+      updated_fields: Object.keys(updateData),
+    });
+
+    // Invalidate caches
+    await cache.del(`${cache.CachePrefix.BOOKING}${bookingId}`);
+    await cache.delPattern(`${cache.CachePrefix.USER_BOOKINGS}${userId}*`);
+
+    return await getBookingById(bookingId);
+  });
+};
 
 // =============================================
 // EXPORT BOOKING DATA (FOR ADMIN)

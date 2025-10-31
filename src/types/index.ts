@@ -116,11 +116,7 @@ export interface CreateBookingDTO {
   checkin_date: string;
   checkout_date: string;
   guest_count: number;
-  // rooms: array of room bookings with quantity
-  rooms: Array<{
-    room_id: string;
-    quantity: number;
-  }>;
+  total_amount: number;
   // optional notes for the booking
   notes?: string;
 }
