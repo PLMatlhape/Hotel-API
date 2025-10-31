@@ -135,11 +135,6 @@ export const createBookingValidator: ValidationChain[] = [
     .withMessage('Accommodation ID is required')
     .isUUID()
     .withMessage('Invalid accommodation ID'),
-  body('room_type_id')
-    .notEmpty()
-    .withMessage('Room type ID is required')
-    .isUUID()
-    .withMessage('Invalid room type ID'),
   body('checkin_date')
     .notEmpty()
     .withMessage('Check-in date is required')
@@ -155,6 +150,17 @@ export const createBookingValidator: ValidationChain[] = [
     .withMessage('Guest count is required')
     .isInt({ min: 1 })
     .withMessage('Guest count must be at least 1'),
+  body('total_amount')
+    .notEmpty()
+    .withMessage('Total amount is required')
+    .isFloat({ min: 0.01 })
+    .withMessage('Total amount must be greater than 0'),
+  body('notes')
+    .optional()
+    .isString()
+    .withMessage('Notes must be a string')
+    .isLength({ max: 1000 })
+    .withMessage('Notes must not exceed 1000 characters'),
 ];
 
 // =============================================
@@ -284,6 +290,47 @@ export const updateUserStatusValidator: ValidationChain[] = [
   body('is_active')
     .isBoolean()
     .withMessage('is_active must be a boolean value'),
+];
+
+// =============================================
+// BOOKING STATUS UPDATE VALIDATOR (ADMIN ONLY)
+// =============================================
+export const updateBookingStatusValidator: ValidationChain[] = [
+  param('id')
+    .isUUID()
+    .withMessage('Invalid booking ID'),
+  body('status')
+    .notEmpty()
+    .withMessage('Status is required')
+    .isIn(['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled', 'no_show'])
+    .withMessage('Invalid status value'),
+];
+
+// =============================================
+// USER BOOKING UPDATE VALIDATOR
+// =============================================
+export const updateUserBookingValidator: ValidationChain[] = [
+  param('id')
+    .isUUID()
+    .withMessage('Invalid booking ID'),
+  body('checkin_date')
+    .optional()
+    .isISO8601()
+    .withMessage('Invalid check-in date format'),
+  body('checkout_date')
+    .optional()
+    .isISO8601()
+    .withMessage('Invalid check-out date format'),
+  body('guest_count')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Guest count must be at least 1'),
+  body('notes')
+    .optional()
+    .isString()
+    .withMessage('Notes must be a string')
+    .isLength({ max: 1000 })
+    .withMessage('Notes must not exceed 1000 characters'),
 ];
 
 // =============================================
